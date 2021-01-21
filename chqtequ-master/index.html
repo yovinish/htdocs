@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - geometry - cube</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="css/main.css">
+		<style media="screen">
+			#menu{
+				position: absolute;
+				width: 100%;
+				text-align: center;
+				background-color: rgba(0, 0, 0, 0.5);
+			}
+		</style>
+	</head>
+	<body>
+
+		<div class="loader">
+      <span class="letter">L</span>
+      <span class="letter">O</span>
+      <span class="letter">A</span>
+      <span class="letter">D</span>
+      <span class="letter">I</span>
+      <span class="letter">N</span>
+      <span class="letter">G</span>
+    </div>
+
+		<script src="js/app.js"></script>
+
+		<div id="menu">
+			<h1>Click to move !</h1>
+		</div>
+
+		<script type="module">
+
+			//imports
+			import * as THREE from './js/three.module.js';
+			import { GUI } from './js/dat.gui.module.js';
+			import { AudioListener } from './js/audio/AudioListener.js';
+			import { PositionalAudio } from './js/audio/PositionalAudio.js';
+			import { Audio } from './js/audio/Audio.js';
+			import { AudioLoader } from './js/audio/AudioLoader.js';
+			import { PointerLockControls } from './js/PointerLockControls.js';
+			import Stats from './js/stats.module.js';
+			import { ColladaLoader } from './js/ColladaLoader.js';
+
+
+			// helper objects
+			let shadowCameraHelper, directionalLightHelper;
+
+			// need some counters...
+			let count = 200;
+			let count2 = 0;
+
+			// sound variables
+			let listener, step_sound, step_Loader;
+			let location_step_sound = "sound/336598__inspectorj__footsteps-concrete-a.wav";
+
+			// basic objects
+			let camera, scene, renderer, controls, gui, stats, clock;
+
+			// animations
+			let loader, avatar, animations, mixer, action;
+
+
+			// world objects
+			let towers, roofs, walls, ground, directionalLight, ambient, magic_disk, doors;
+
+			// load textures
+			let texture_wall = new THREE.TextureLoader().load( 'textures/wall.jpg' );
+			let texture_roof = new THREE.TextureLoader().load( 'textures/roof.jpg' );
+			let texture_ground = new THREE.TextureLoader().load( 'textures/ground.jpg' );
+			let texture_background = new THREE.TextureLoader().load( 'textures/universe.jpg' );
+			let texture_doors = new THREE.TextureLoader().load( 'textures/doors.jpg' );
+
+
+			// geometry and materials variables
+			let geometry_tower = new THREE.CylinderBufferGeometry( 40, 40, 200, 200 );
+			let material_wall = new THREE.MeshPhongMaterial( { map: texture_wall } );
+			let material_doors = new THREE.MeshPhongMaterial( { map: texture_doors } );
+			let geometry_doors = new THREE.BoxBufferGeometry( 50, 150, 5 );
+			let geometry_roof = new THREE.ConeBufferGeometry( 50,50,32 );
+			let material_roof = new THREE.MeshPhongMaterial( { map: texture_roof } );
+			let geometry_wall_1 = new THREE.BoxBufferGeometry( 500, 100, 40 );
+			let geometry_wall_2 = new THREE.BoxBufferGeometry( 40, 100, 500 );
+
+
+			launch();
+
+			// basic functions call
+			function launch(){
+				init();
+				buildGui();
+				//render();
+				animate();
+			}
+
+			// setup init
+			function init() {
+
+
+				// create scene
+				scene = new THREE.Scene();
+
+
+				// setup renderer
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				document.body.appendChild( renderer.domElement );
+
+				var manager = new THREE.LoadingManager();
+				manager.onProgress = function ( item, loaded, total ) {
+  				console.log("mes couilles");
+				};
+
+				// stats
+				stats = new Stats();
+				document.body.appendChild( stats.dom );
+
+				// clock
+				clock = new THREE.Clock();
+
+
+				// enable shadows in renderer
+				renderer.shadowMap.enabled = true;
+				renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+				renderer.outputEncoding = THREE.sRGBEncoding;
+
+
+				//create ambient (basic light)
+				ambient = new THREE.AmbientLight(0xffffff, 0.1);
+				scene.add( ambient );
+
+
+				// setup light
+				directionalLight = new THREE.DirectionalLight( 0xffffff, 0.4 );
+				directionalLight.position.set( -100, 90, 100 );
+				directionalLight.castShadow = true;
+				directionalLight.shadow.camera.near = 1;
+				directionalLight.shadow.camera.far = 5000;
+				let shadowCameraSize = 1000;
+				directionalLight.shadow.camera.left = -shadowCameraSize;
+				directionalLight.shadow.camera.right = shadowCameraSize;
+				directionalLight.shadow.camera.top = shadowCameraSize;
+				directionalLight.shadow.camera.bottom = -shadowCameraSize;
+				scene.add( directionalLight );
+
+
+				// setup helpers
+				directionalLightHelper = new THREE.DirectionalLightHelper( directionalLight, 5 );
+        //scene.add( directionalLightHelper );// DEBUG: not for prod
+				shadowCameraHelper = new THREE.CameraHelper( directionalLight.shadow.camera );
+				//scene.add(shadowCameraHelper);// DEBUG: not for prod
+
+
+				// setup camera
+				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 3000 );
+				camera.position.z = 20;
+				camera.position.y = 450;
+				camera.position.x = -350;
+				camera.lookAt(scene.position.set(-200, 100, 200));
+
+
+				// setup firstPersonControl
+				controls = new PointerLockControls(camera, renderer.domElement);
+				controls.addEventListener('lock', function () {
+					let menu = document.getElementById("menu");
+					menu.style.display = "none";
+				});
+				controls.addEventListener('unlock', function () {
+					let menu = document.getElementById("menu");
+					menu.style.display = "block";
+				});
+				// on click, lock the pointer on mouse
+				document.addEventListener('keydown', Keyboard, false);
+
+
+				// setup background
+				scene.background = texture_background;
+
+
+				// setup texture to repeat (instead of cover)
+				texture_wall.wrapS = THREE.RepeatWrapping;
+				texture_wall.wrapT = THREE.RepeatWrapping;
+				texture_wall.repeat.set(1, 0.5);
+
+
+				//GROUND
+				var geometry_ground = new THREE.PlaneBufferGeometry( 5000, 5000, 1 );
+				geometry_ground.rotateX(-Math.PI * 0.5); // setup horizontally
+				var ground_texture = new THREE.MeshPhongMaterial( { map: texture_ground, side: THREE.DoubleSide} );
+				ground = new THREE.Mesh(geometry_ground, ground_texture);
+				ground.receiveShadow = true;
+				scene.add( ground );
+				ground.position.y = -50;
+				ground.position.x = 250;
+				ground.position.z = -250;
+
+
+				//collada
+				loader = new ColladaLoader();
+				loader.load( './models/stormtrooper/stormtrooper.dae', function ( collada ) {
+
+					avatar = collada.scene;
+					animations = collada.animations;
+					console.log(animations);
+
+					avatar.traverse( function ( node ) {
+
+						if ( node.isSkinnedMesh ) {
+
+							node.frustumCulled = false;
+
+						}
+
+					} );
+
+					mixer = new THREE.AnimationMixer( avatar );
+					action = mixer.clipAction( animations[0] );
+					action.play();
+
+					avatar.scale.set(20, 20, 20);
+					avatar.position.set(250, -50, 100);
+					scene.add( avatar );
+
+				} );
+
+				// TOWERS
+				towers = generate_towers();
+
+
+				// ROOFS
+				roofs = generate_roofs();
+
+
+				// WALLS
+				walls = generate_walls();
+
+
+				// DOOR
+				doors = generate_door();
+
+
+				// MAGIC DISK
+				magic_disk = magic_object();
+
+
+				// call resize on window changes
+				window.addEventListener( 'resize', onWindowResize, false );
+
+
+				// things to call on user click
+				renderer.domElement.addEventListener( 'click', function () {
+					controls.lock();
+
+					if (count2 == 0) {
+						count2++;
+						guard_step();
+					}
+				}, false );
+
+			}
+
+
+			// resize camera when the window change resolution
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+
+			// move with zqsd
+			function Keyboard() {
+				let speed = 10;
+				if (event.keyCode == 90){
+					controls.moveForward(speed);
+				}
+				if (event.keyCode == 83) {
+					controls.moveForward(-speed);
+				}
+				if (event.keyCode == 68) {
+					controls.moveRight(speed);
+				}
+				if (event.keyCode == 81) {
+					controls.moveRight(-speed);
+				}
+				if (event.keyCode == 65) {
+					camera.position.y = camera.position.y - speed;
+				}
+				if (event.keyCode == 32) {
+					camera.position.y = camera.position.y + speed;
+				}
+			}
+
+
+			// create magic disk
+			function magic_object(){
+
+				var texture = new THREE.TextureLoader().load( 'textures/glass.jpg' );;
+				var geometry = new THREE.CylinderBufferGeometry( 50,50,10,200);
+				var material = new THREE.MeshPhongMaterial( { map: texture, shininess: 500, specular : 0xffffff, opacity : 0.7, transparent : true } );
+
+				let circle = new THREE.Mesh( geometry, material );
+
+				circle.position.x = 250;
+				circle.position.y = 100;
+				circle.position.z = -250;
+				circle.castShadow = true;
+				circle.receiveShadow = true;
+
+				scene.add(circle);
+
+				return circle;
+
+			}
+
+			function guard_step(){
+				camera_listener();
+				step_sound = new THREE.PositionalAudio(listener);
+
+				step_Loader = new THREE.AudioLoader();
+				step_Loader.load(location_step_sound, function(buffer){
+					step_sound.setBuffer(buffer);
+					step_sound.setLoop(true);
+					step_sound.setRefDistance(20);
+					step_sound.setVolume(0.5);
+					step_sound.play();
+				});
+				magic_disk.add(step_sound)
+			}
+
+			// function used to add camera in listener of a sound
+			function camera_listener(){
+				listener = new THREE.AudioListener();
+				camera.add(listener);
+			}
+
+			// animation loop
+			function animate() {
+
+
+				magic_disk.rotation.y +=0.02;
+
+
+				// magic_disk going up and down
+				if (count >= 0) {
+					magic_disk.position.y -=0.5;
+					count-=1;
+					if (count === 0) {
+						count -=200;
+					}
+				} else {
+					magic_disk.position.y +=0.5;
+					count+=1;
+					if (count === 0) {
+						count +=200;
+					}
+				}
+
+				render();
+				requestAnimationFrame( animate );
+				stats.update();
+
+			}
+
+
+			// render : lmao idk why i wrote that
+			function render() {
+
+				const delta = clock.getDelta();
+
+				if ( mixer ) {
+					mixer.update( delta );
+				}
+
+				shadowCameraHelper.update();
+				directionalLightHelper.update();
+
+				renderer.render( scene, camera );
+
+			}
+
+
+			// generate towers and return array of towers's object
+			function generate_towers() {
+				let array = [];
+				let varX = 0;
+				let varY = 0;
+				let varZ = 0;
+
+				for (var i = 1; i <= 4; i++) {
+					if (i === 2) {
+						varX = varX + 500;
+					}
+					if (i === 3) {
+						varX = varX - 500;
+						varZ = varZ - 500;
+					}
+					if (i === 4) {
+						varX = varX + 500;
+					}
+					let tower = new THREE.Mesh( geometry_tower, material_wall );
+					tower.castShadow = true;
+					tower.receiveShadow = true;
+					tower.position.x = varX;
+					tower.position.y = varY;
+					tower.position.z = varZ;
+					array.push(tower);
+					scene.add(tower);
+				}
+				return array;
+
+			}
+
+
+			// generate roofs and return array of roofs's object
+			function generate_roofs() {
+				let array = [];
+				let varX = 0;
+				let varY = 125;
+				let varZ = 0;
+
+				for (var i = 1; i <= 4; i++) {
+					if (i === 2) {
+						varX = varX + 500;
+					}
+					if (i === 3) {
+						varX = varX - 500;
+						varZ = varZ - 500;
+					}
+					if (i === 4) {
+						varX = varX + 500;
+					}
+					let roof = new THREE.Mesh( geometry_roof, material_roof );
+					roof.castShadow = true;
+					roof.receiveShadow = true;
+					roof.position.x = varX;
+					roof.position.y = varY;
+					roof.position.z = varZ;
+					array.push(roof);
+					scene.add(roof);
+				}
+				return array;
+
+			}
+
+
+			// generate walls and return array of walls's object
+			function generate_walls() {
+				let array = [];
+				let varX = 250;
+				let varY = 0;
+				let varZ = 0;
+
+				for (var i = 1; i <= 4; i++) {
+					let wall;
+					if (i === 1 || i === 4) {
+						wall = new THREE.Mesh( geometry_wall_1, material_wall );
+					} else {
+						wall = new THREE.Mesh( geometry_wall_2, material_wall );
+					}
+
+					if (i === 2) {
+						varX = varX - 250;
+						varZ = varZ - 250;
+					}
+					if (i === 3) {
+						varX = varX + 500;
+					}
+					if (i === 4) {
+						varX = varX - 250;
+						varZ = varZ - 250;
+					}
+
+					wall.castShadow = true;
+					wall.receiveShadow = true;
+					wall.position.x = varX;
+					wall.position.y = varY;
+					wall.position.z = varZ;
+					array.push(wall);
+					scene.add(wall);
+
+				}
+				return array;
+
+			}
+
+			function generate_door(){
+				let varX = 260;
+				let varY = -50;
+				let varZ = 23;
+
+				let doors = new THREE.Mesh( geometry_doors, material_doors );;
+
+				doors.castShadow = true;
+				doors.receiveShadow = true;
+				doors.position.x = varX;
+				doors.position.y = varY;
+				doors.position.z = varZ;
+				doors.rotation.x = 0;
+				scene.add(doors);
+				return doors;
+
+			}
+
+			function buildGui() {
+
+				gui = new GUI();
+
+				var params = {
+					//circle: circle.position.x,
+					light_position_x: directionalLight.position.x,
+					light_position_y: directionalLight.position.y,
+					light_position_z: directionalLight.position.z,
+					doors_rotation_x: doors.rotation.x
+				};
+
+				//gui.add( params, 'circle', 0, 200 ).onChange( function ( val ) {
+
+					//circle.position.x = val;
+					//render();
+
+				//} );
+
+				gui.add( params, 'light_position_x', -500, 500 ).onChange( function ( val ) {
+
+					directionalLight.position.x = val;
+					render();
+
+				} );
+
+				gui.add( params, 'light_position_y', 0, 500 ).onChange( function ( val ) {
+
+					directionalLight.position.y = val;
+					render();
+
+				} );
+
+				gui.add( params, 'light_position_z', -500, 500 ).onChange( function ( val ) {
+
+					directionalLight.position.z = val;
+					render();
+
+				} );
+
+				gui.add( params, 'doors_rotation_x', 0, Math.PI/2 ).onChange( function ( val ) {
+
+					doors.rotation.x = val;
+					render();
+
+				} );
+
+
+				gui.open();
+
+			}
+
+		</script>
+
+	</body>
+</html>
